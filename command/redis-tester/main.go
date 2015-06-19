@@ -36,8 +36,8 @@ type configuration struct {
 	}
 	ReconnectEvents struct {
 		// Enabled bool          // enable open and closing connections.
-		Rate  time.Duration // rate to generate the events in milliseconds.
-		Ratio float64       // percent of connections (based on PoolConfiguration.MaxActive) to close on each event.
+		Rate time.Duration // rate to generate the events in milliseconds.
+		// Ratio float64       // percent of connections (based on PoolConfiguration.MaxActive) to close on each event.
 	}
 	PoolConfiguration struct {
 		MaxActive   int
@@ -112,6 +112,7 @@ func main() {
 	var conf configuration
 	var stresser stress
 
+	conf.StresserMode = new(string)
 	shutdown := make(chan struct{}, 15)
 	errorEvents := make(chan error, 1000)
 	monitor := tester.NewMonitor()
@@ -120,7 +121,7 @@ func main() {
 
 	app := kingpin.New("spike", "spike command line for testing functionality")
 	app.Flag("stresser-count", "number of concurrent stressers to immediately start").Default("0").IntVar(&conf.StresserCount)
-	app.Flag("stresser-mode", "what kind of stress load you want to generate").Default("operations").EnumVar(&conf.StresserMode, "operations", "connections")
+	app.Flag("stresser-mode", "what kind of stress load you want to generate").Default("operations").EnumVar(&conf.StresserMode, operations, connections)
 	app.Flag("address", "tcp address of the redis server").Default("localhost:6379").TCPVar(&conf.TCPAddr)
 	app.Flag("metrics-enabled", "enable logging metrics").Default("false").BoolVar(&conf.Metrics.Enabled)
 	app.Flag("pool-active-max", "maximum number of connections to allow").Default("0").IntVar(&conf.PoolConfiguration.MaxActive)
@@ -128,18 +129,16 @@ func main() {
 	app.Flag("pool-idle-timeout", "how long before closing an unused idle connection").Default("5s").DurationVar(&conf.PoolConfiguration.IdleTimeout)
 	app.Flag("auto-scale-enabled", "continuously increase the stress until errors occur").Default("false").BoolVar(&conf.Autoscale.Enabled)
 	app.Flag("auto-scale-rate", "time between increases in stress").Default("50ms").DurationVar(&conf.Autoscale.Rate)
-	// app.Flag("reconnect-events-enabled", "enable reconnect events, if enabled ensure pool-idle-max is 0").Default("false").BoolVar(&conf.ReconnectEvents.Enabled)
 	app.Flag("reconnect-events-rate", "time between reopen a connection").Default("2s").DurationVar(&conf.ReconnectEvents.Rate)
-	app.Flag("reconnect-events-percent", "percentage of the currently connected number of connections to close").Default("0").FloatVar(&conf.ReconnectEvents.Ratio)
 
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 
-	// reconnect := reconnectEvents{ReconnectEvents: tester.ReconnectEvents{Shutdown: make(chan struct{}, 15), Rate: conf.ReconnectEvents.Rate, Address: conf.TCPAddr}}
-
 	switch *conf.StresserMode {
 	case operations:
+		log.Println("running operations stress mode")
 		stresser = newOperationsStress(conf, monitor, shutdown, errorEvents)
 	case connections:
+		log.Println("running connections stress mode")
 		stresser = newReconnectStress(conf, shutdown, errorEvents)
 	default:
 		log.Fatalln("unknown stress mode")
@@ -156,10 +155,6 @@ func main() {
 	if conf.Metrics.Enabled {
 		go PrintMonitor(conf.TCPAddr.String(), monitor)
 	}
-
-	// if conf.ReconnectEvents.Enabled {
-	// 	go reconnect.Increase()
-	// }
 
 	for i := 0; i < conf.StresserCount; i++ {
 		application.Increase()

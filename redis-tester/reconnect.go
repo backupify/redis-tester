@@ -15,13 +15,19 @@ type ReconnectEvents struct {
 }
 
 func (t ReconnectEvents) Stress() {
+	stopper := make(chan struct{})
 	timer := time.NewTicker(t.Rate)
+
+	// LIFO order
+	defer close(stopper) // second cleanup stopper
+	defer timer.Stop()   // first stop the timer
+
 	reconnect := func(addr *net.TCPAddr) {
 		conn, err := redis.DialTimeout("tcp", t.Address.String(), 50*time.Millisecond, 10*time.Second, 10*time.Second)
 		if err != nil {
 			t.ErrorEvents <- err
+			stopper <- struct{}{}
 		} else {
-			time.Sleep(100 * time.Millisecond)
 			conn.Close()
 		}
 	}
@@ -29,10 +35,12 @@ func (t ReconnectEvents) Stress() {
 	for {
 		select {
 		case <-timer.C:
-			go reconnect(t.Address)
+			reconnect(t.Address)
 		case <-t.Shutdown:
-			timer.Stop()
+			return
+		case <-stopper:
 			return
 		}
 	}
+
 }
