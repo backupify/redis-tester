@@ -28,6 +28,7 @@ func (t ReconnectEvents) Stress() {
 			t.ErrorEvents <- err
 			stopper <- struct{}{}
 		} else {
+			conn.Do("PING")
 			conn.Close()
 		}
 	}
