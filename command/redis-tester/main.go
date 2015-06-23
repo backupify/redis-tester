@@ -81,7 +81,7 @@ func newOperationsStress(conf configuration, monitor tester.Monitor, shutdown ch
 				return err
 			},
 			Dial: func() (redis.Conn, error) {
-				return redis.Dial("tcp", conf.TCPAddr.String())
+				return redis.Dial(conf.TCPAddr.Network(), conf.TCPAddr.String())
 			},
 		},
 		ErrorEvents: errorEvents,
@@ -144,6 +144,7 @@ func main() {
 		log.Fatalln("unknown stress mode")
 	}
 
+	log.Println(conf.TCPAddr.String(), conf.TCPAddr.Network(), conf.TCPAddr.Zone)
 	application := newApplication(stresser, shutdown, errorEvents)
 
 	auto := autoscale{app: application, resume: make(chan struct{}), rate: conf.Autoscale.Rate}
